@@ -1,0 +1,137 @@
+---
+title: "Tests for partially matched samples (AMS 597 project)"
+author: "Amy Philip (110457611)"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Put the title of your vignette here}
+  %\VignetteEngine{knitr::rmarkdown}
+  \usepackage[utf8]{inputenc}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+In this vignette, I am explaining about an R package **PMphilip**. The functions in this package executes p-values which helps in filling the missing data in partially matched samples. This package is based on a series of tests mentioned in the publication, ['A Simple and Robust Method for Partially Matched Samples Using the P-Values Pooling Approach'](https://onlinelibrary.wiley.com/doi/abs/10.1002/sim.5758) by Pei-Fen Kuan and Bo Huang published in 2013. The p-values generated are using Liptak’s weighted Z-test, Kim et al.’s modified t-statistic, Looney and Jones’s corrected Z-test, Lin and Stivers’s MLE based test under heteroscedasticity, Ekbohm’s MLE-based test under homoscedasticity. 
+
+## Disclosure
+
+To create and implement this package successfully, I discussed the project with my friends/classmates Xuliejun Ren (our methodologies are similar, not the codes) and Benjamin Sterling (mainly in clarifying the purpose of tests and implementation of certain tests, considering all possible scenarios).
+
+## Implementation of the package
+
+The p-value pooling works at its best when the data is Gaussian. I can check for this using the command **qnorm()** in R. If I get a line y=x (approximately), then I can conclude the data is Gaussian. If the data I have is not Gaussian or t-distributed, then it is better to apply combining the non-parametric Wilcoxon signed-rank and the Mann-Whitney statistics for
+discrete or ranked data.
+
+The input variables here are the matched sample vectors (**x,y**), with missing values. Tests mentioned in the introduction, uses statistical methods to generate p-values to help impute appropriate missing values. Once these missing values are imputed, the data can be carried on for any further procedure it was meant to do, which could not have been done with missing values. Say for example, I consider expressed microRNA data of tumor sample and the corresponding expressed microRNA data of normal tissue samples (explanation for he codes in the package is also based on these tumor and normal samples). These are matched samples. Our tests can impute missing values, if there are missing data. 
+
+This package can be installed by using the install available in the interface of R. If you are using RStudio, kindly remember to download from 'Package Archive Folder' instead of CRAN, from which you can direct **R** to the directory where the source package is saved. Once the package is installed in R, the package can be loaded the  using **library()**. 
+
+```{r}
+library(PMphilip)
+```
+
+## Parameters and common codes:
+
+For the tests, the parameters **x** and **y** are matched samples. The data is majorly diving into paired and unpaired samples, based on the missing data. The next parameter is **alternative**. Based on the two-sided or one-sided , "two.sided" (default), "greater", "less" can be used. The last parameter used her is **a**. This is mainly used here to check the amount of variance level allowed to perform these tests. I have provided **0.01** as default significance level.  
+
+In each of the tests, the samples are divided into x which has a matched pair (**x_both_samples**), x without a matched pair (**x_samples_part**), y which has a matched pair (**y_both_samples**) and y without a matched pair (**y_samples_part**). The number of matched pairs is denoted by **n1**, number of unpaired **x** is **n2**, number of unpaired **y** is **n3**. A conditional is passed to check whether the variance of samples are equal or not. I use F-test to check this using **var.test()** in R, with significance level **a** mentioned in parameters and a logical argument **var.eq** is defined to be **TRUE**, if the variance turns out to be equal (that is the p-value obtained should be greater than equal to **a**) and **var.eq** is defined to be **FALSE**, if the variance is unequal (that is the p-value obtained should be less than **a**).
+
+## Warnings and Errors:
+
+* If I do not have enough data, which is at least 2 samples for each **x** and **y**, then I get an error.
+
+* If there are no missing values, then an error occurs.
+
+* If the length of the numeric vector **x** is different from the length of the numeric vector **y**, then an error occurs. 
+
+* If I do not have paired samples, which is at least 2, then I perform a **t.test()** with arguments **paired=FALSE** and **var.equal=var.eq**. 
+
+* If I do not have unpaired samples, which is at least 2, then I perform a **t.test()** with arguments **paired=TRUE** and **var.equal=var.eq**. 
+
+Now, let us look at each of the tests separately.
+
+### Liptak’s test (**my.Liptak()**)
+
+Liptak test is based on a weighted Z-test. This test works well for equal variances. The p-value for the Z-statistic is given by $$1-\Phi \Big(\dfrac{w1*z1+w2*z2}{\sqrt{(w1^2+w2^2)}}\Big)$$. In the function, **p1** is the p-value for **n1** paired samples, and **p2** be the corresponding p-value computed from the **n2** and **n3** unpaired samples. This is calculated using **t.test** with arguments **var.equal=var.eq**. logical argument **paired** based on the samples. **w1** and **w2** are corresponding weights which are the square roots of the corresponding weights.  **zi=$\Phi^{-1}$(1-pi)** for i=1,2. P-values pooling is only meaningful if **p1** and **p2** are computed from one-sided
+hypothesis tests to avoid directional conflict. The two-sided p-value is then obtained by first calculating p-value for alternative greater, say **p** and the two-sided p-value will be **2p** if **p<1/2** and **2(1-p)** otherwise. An example applying this test is provided below:
+
+I consider an example with data variability up to significance level **a=0.05** 
+
+```{r}
+x<-subset(ChickWeight, Time==8)$weight
+y<-subset(ChickWeight, Time==10)$weight
+x[2:6]<-NA
+y[14:16]<-NA
+var.test(x,y)$p.value #0.063>0.05 means that data has equal variance. SO the test works well here.
+my.Liptak(x,y,alternative="two.sided", a=0.05)
+```
+
+### Kim et al.'s test (**my.Kim()**)
+
+The modified t-statistic of Kim et al. defined as $$\dfrac{n1*D+nH*(T-N)}{\sqrt {n1*SD\_D^2+nH^2*(SD\_N^2/n3+SD\_T^2/n2)}}$$ where, **D** is the mean difference of the **n1** paired samples, **T** and **N** are the mean of unpaired samples for the **n2** and **n3** unmatched samples, respectively. **SD_D**, **SD_T** and **SD_N** are the corresponding sample standard deviations, and **nH** is the harmonic mean of **n2** and **n3**. Under null hypothesis the statistic follows standard normal distribution. Hence the p-value is calculated using **pnorm**. An example is given as follows:
+
+```{r}
+x<-subset(ChickWeight, Time==8)$weight
+y<-subset(ChickWeight, Time==10)$weight
+x[2:13]<-NA
+y[14:26]<-NA
+my.Kim(x,y,alternative="greater", a=0.01)
+```
+
+### Looney and Jones test (**my.Looney.Jones()**)
+
+Looney and Jones is based on a modified variance estimation of the standard Z-test by accounting for the correlation among the **n1** matched pairs. This modifies Z-statistic is defined as $$\dfrac{T\_-N\_}{\sqrt{SD\_T\_^2/(n1+n2)+SD\_N\_^2/(n1+n3)-2*n1*SD\_TN1/((n1+n2)*(n1+n3))}}$$
+
+where, **T_** and **N_** are the mean of paired **x** samples and unpaired **y** for the **n1 + n2** and **n1 + n3** matched and unmatched samples combined, respectively. **SD_T** and **SD_N_** are the corresponding sample standard deviations, and **STN1** is the sample covariance of the **n1** paired samples. Under null hypothesis, the statistic follows a standard normal distribution. An example illustrating the test is given as follows:
+
+```{r}
+x<-subset(ChickWeight, Time==8)$weight
+y<-subset(ChickWeight, Time==10)$weight
+x[2:13]<-NA
+y[14:26]<-NA
+my.Looney.Jones(x,y,alternative="less")
+```
+
+### Lin and Stivers’s test (**(my.Lin.Stivers)**)
+
+Lin and Stiver's test statistic is based on the modified maximum likelihood estimator. This test is defined for heteroscedastic case, that is when the variances are not equal. The statistic is given by $$\dfrac{f*(T1-T)-g*(N1-N)+T-N}{\sqrt{V1}}$$ where, **T1** and **N1** are the mean for paired and unpaired **x** for the **n1** paired samples. **ST1** and **SN1** are the corresponding sample standard deviations, respectively, **V1**, **f**, **g** and **r** are constants which can be found in the paper provided in the introduction. Under the null hypothesis, the statistic is approximately distributed as **t** with **n1** degrees of freedom. A warning code is provided in the function to state that the test works well when the variance in the data is unequal. An example illustrating the test is given below.
+
+```{r}
+x<-subset(ChickWeight, Time==8)$weight
+y<-subset(ChickWeight, Time==10)$weight
+x[2:13]<-NA
+y[14:26]<-NA
+my.Lin.Stivers(x,y,alternative="two.sided", a=0.02)
+x<-subset(ChickWeight, Time==8)$weight
+y<-subset(ChickWeight, Time==10)$weight
+x[2:7]<-NA; y[14:20]<-NA
+my.Lin.Stivers(x,y)
+```
+
+### Ekbohm's test (**my.Ekbohm()**)
+
+Ekbohm's test statistic is based on the modified maximum likelihood estimator. This test is defined for homoscedastic case, that is when the variances are equal. This MLE based test statistic is given as $$\dfrac{f\_*(T1-T)-g\_*(N1-N)+T-N}{\sqrt{V1\_}}$$ where **V1_**, **f_** and **g_** are constants which can be found in the paper that is provided in the introduction. A warning code is provided in the function to state that the test works well when the variances in the data are equal. An example illustrating the test is given below.
+
+```{r}
+x<-subset(ChickWeight, Time==8)$weight
+y<-subset(ChickWeight, Time==10)$weight
+x[2:6]<-NA
+y[14:16]<-NA
+var.test(x,y)$p.value #0.063>0.05 means that data has equal variance. So the test works well here.
+my.Ekbohm(x,y, a=0.05)
+if(!require(mvtnorm)){
+install.packages("mvtnorm")}
+library(mvtnorm)
+set.seed(123); 
+s<-matrix(c(1,0.2,0.2,4), ncol=2)
+d<-rmvnorm(100,c(0,0),s)
+x<-d[,1]; y<-d[,2]
+x[2:13]<-NA
+y[14:26]<-NA
+my.Ekbohm(x,y, a=0.5)
+```
+
+## Thank you
